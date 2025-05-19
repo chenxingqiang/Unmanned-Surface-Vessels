@@ -21,7 +21,7 @@ This repository contains a complete simulation and visualization system for Unma
 
 1. Clone this repository:
    ```
-   git clone https://github.com/your-username/Unmanned-Surface-Vessels.git
+   git clone https://github.com/chenxingqiang/Unmanned-Surface-Vessels.git
    cd Unmanned-Surface-Vessels
    ```
 
