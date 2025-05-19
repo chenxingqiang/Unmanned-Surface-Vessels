@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USV Navigation & Control Visualization</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" integrity="sha512-KfkfwYDsLkIlwQp6LFnl8zNdLGxu9YAA1QvwINks4PhcElQSvqcyVLLD9aMhXd13uQjoXtEKNosOWaZqXgel0g==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-ship me-2"></i>USV Navigation & Control
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#"><i class="fas fa-home me-1"></i>Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#"><i class="fas fa-cog me-1"></i>Config</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#"><i class="fas fa-chart-line me-1"></i>Results</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-3">
+        <div class="row">
+            <!-- Left Control Panel -->
+            <div class="col-md-3">
+                <div class="card mb-3">
+                    <div class="card-header bg-primary text-white">
+                        <i class="fas fa-sliders-h me-2"></i>Simulation Controls
+                    </div>
+                    <div class="card-body">
+                        <form id="simulation-form">
+                            <div class="mb-3">
+                                <label for="scenario-select" class="form-label">Scenario</label>
+                                <select class="form-select" id="scenario-select">
+                                    <option value="waypoint">Waypoint</option>
+                                    <option value="obstacle" selected>Obstacle</option>
+                                    <option value="path">Path Following</option>
+                                    <option value="highspeed">High-speed Maneuvering</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="controller-select" class="form-label">Controller</label>
+                                <select class="form-select" id="controller-select">
+                                    <option value="pid" selected>PID Controller</option>
+                                    <option value="lqr">LQR Controller</option>
+                                    <option value="mpc">MPC Controller</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="speed-slider" class="form-label">Simulation Speed: <span id="speed-value">1.0x</span></label>
+                                <input type="range" class="form-range" id="speed-slider" min="0.1" max="5" step="0.1" value="1.0">
+                            </div>
+                        </form>
+                        
+                        <div class="d-grid gap-2">
+                            <button id="start-button" class="btn btn-success">
+                                <i class="fas fa-play me-2"></i>Start
+                            </button>
+                            <button id="pause-button" class="btn btn-warning" disabled>
+                                <i class="fas fa-pause me-2"></i>Pause
+                            </button>
+                            <button id="stop-button" class="btn btn-danger" disabled>
+                                <i class="fas fa-stop me-2"></i>Stop
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-header bg-info text-white">
+                        <i class="fas fa-info-circle me-2"></i>Simulation Status
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Progress</label>
+                            <div class="progress">
+                                <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%;">0%</div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Simulation Time</label>
+                            <p id="simulation-time" class="form-control">0.0 s</p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Path Error</label>
+                            <p id="path-error" class="form-control">0.0 m</p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Heading Error</label>
+                            <p id="heading-error" class="form-control">0.0 deg</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main Visualization Area -->
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-cube me-2"></i>3D Visualization
+                        </div>
+                        <div class="btn-group" role="group">
+                            <button id="view-top" class="btn btn-sm btn-light" title="Top View">
+                                <i class="fas fa-arrow-down"></i>
+                            </button>
+                            <button id="view-follow" class="btn btn-sm btn-light" title="Follow USV">
+                                <i class="fas fa-crosshairs"></i>
+                            </button>
+                            <button id="view-free" class="btn btn-sm btn-light active" title="Free Camera">
+                                <i class="fas fa-camera"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="visualization-container" style="height: 500px;"></div>
+                    </div>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-header bg-warning text-dark">
+                        <i class="fas fa-map me-2"></i>Trajectory View
+                    </div>
+                    <div class="card-body p-0">
+                        <canvas id="trajectory-canvas" style="width: 100%; height: 300px;"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Data Plots -->
+            <div class="col-md-3">
+                <div class="card mb-3">
+                    <div class="card-header bg-secondary text-white">
+                        <i class="fas fa-chart-area me-2"></i>Position Data
+                    </div>
+                    <div class="card-body p-0">
+                        <canvas id="position-chart" style="width: 100%; height: 200px;"></canvas>
+                    </div>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-header bg-secondary text-white">
+                        <i class="fas fa-chart-area me-2"></i>Velocity Data
+                    </div>
+                    <div class="card-body p-0">
+                        <canvas id="velocity-chart" style="width: 100%; height: 200px;"></canvas>
+                    </div>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-header bg-secondary text-white">
+                        <i class="fas fa-chart-area me-2"></i>Control Signals
+                    </div>
+                    <div class="card-body p-0">
+                        <canvas id="control-chart" style="width: 100%; height: 200px;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.min.js"></script>
+
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+
+    <!-- Three.js - Load first to ensure it's available for visualization.js -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+
+    <!-- Custom Scripts - Load in proper order -->
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/visualization.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/controls.js') }}"></script>
+
+    <!-- Main App Script - Load last after all dependencies -->
+    <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html> 

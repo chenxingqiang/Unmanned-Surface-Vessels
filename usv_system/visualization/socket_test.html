@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket.IO Connection Test</title>
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .log { background: #f5f5f5; border: 1px solid #ddd; padding: 10px; height: 300px; overflow-y: auto; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Socket.IO Connection Test</h1>
+    <div>
+        <label for="port">Port:</label>
+        <input type="number" id="port" value="9000" min="1" max="65535">
+        <button id="connect">Connect</button>
+        <button id="disconnect" disabled>Disconnect</button>
+    </div>
+    <div>
+        <button id="get-state" disabled>Get State</button>
+        <button id="start-sim" disabled>Start Simulation</button>
+        <button id="stop-sim" disabled>Stop Simulation</button>
+    </div>
+    <h2>Log:</h2>
+    <div class="log" id="log"></div>
+
+    <script>
+        let socket = null;
+        const log = document.getElementById('log');
+        const connectBtn = document.getElementById('connect');
+        const disconnectBtn = document.getElementById('disconnect');
+        const getStateBtn = document.getElementById('get-state');
+        const startSimBtn = document.getElementById('start-sim');
+        const stopSimBtn = document.getElementById('stop-sim');
+        const portInput = document.getElementById('port');
+
+        function logMessage(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = type;
+            entry.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        connectBtn.addEventListener('click', () => {
+            const port = portInput.value;
+            try {
+                logMessage(`Connecting to http://localhost:${port}...`);
+                
+                socket = io(`http://localhost:${port}`, {
+                    reconnection: true,
+                    reconnectionAttempts: 5,
+                    timeout: 10000
+                });
+
+                socket.on('connect', () => {
+                    logMessage(`Connected to server with ID: ${socket.id}`, 'success');
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    getStateBtn.disabled = false;
+                    startSimBtn.disabled = false;
+                    stopSimBtn.disabled = false;
+                });
+
+                socket.on('connect_error', (error) => {
+                    logMessage(`Connection error: ${error}`, 'error');
+                });
+
+                socket.on('disconnect', () => {
+                    logMessage('Disconnected from server', 'info');
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    getStateBtn.disabled = true;
+                    startSimBtn.disabled = true;
+                    stopSimBtn.disabled = true;
+                });
+
+                // Simulation events
+                socket.on('simulation_status', (data) => {
+                    logMessage(`Simulation status: ${JSON.stringify(data)}`, 'info');
+                });
+
+                socket.on('simulation_state', (data) => {
+                    logMessage(`Simulation state: ${JSON.stringify(data)}`, 'info');
+                });
+
+                socket.on('simulation_data', (data) => {
+                    logMessage(`Received simulation data at time: ${data.time}`, 'success');
+                    if (data.state) {
+                        const pos = data.state;
+                        logMessage(`Position: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}), heading: ${pos.heading.toFixed(2)}`, 'info');
+                    }
+                });
+            } catch (error) {
+                logMessage(`Error creating socket: ${error}`, 'error');
+            }
+        });
+
+        disconnectBtn.addEventListener('click', () => {
+            if (socket) {
+                socket.disconnect();
+                logMessage('Manually disconnected from server');
+            }
+        });
+
+        getStateBtn.addEventListener('click', () => {
+            if (socket) {
+                logMessage('Getting simulation state...');
+                socket.emit('get_simulation_state');
+            }
+        });
+
+        startSimBtn.addEventListener('click', () => {
+            if (socket) {
+                logMessage('Starting simulation...');
+                socket.emit('start_simulation', {
+                    scenario: 'obstacle',
+                    controller: 'pid',
+                    use_obstacle_avoidance: true
+                });
+            }
+        });
+
+        stopSimBtn.addEventListener('click', () => {
+            if (socket) {
+                logMessage('Stopping simulation...');
+                socket.emit('stop_simulation');
+            }
+        });
+    </script>
+</body>
+</html>

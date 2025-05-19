@@ -1,0 +1,203 @@
+controllers:
+  lqr:
+    Q:
+    - 10.0
+    - 10.0
+    - 20.0
+    - 5.0
+    - 1.0
+    - 5.0
+    R:
+    - 1.0
+    - 10.0
+    max_thrust: 100.0
+    max_yaw_rate: 0.5
+  mpc:
+    Q:
+    - 10.0
+    - 10.0
+    - 20.0
+    - 5.0
+    - 1.0
+    - 5.0
+    R:
+    - 1.0
+    - 10.0
+    dR:
+    - 0.5
+    - 5.0
+    max_thrust: 100.0
+    max_yaw_rate: 0.5
+    prediction_horizon: 20
+    solver_options:
+      max_iter: 100
+      tol: 1e-6
+  pid:
+    heading_gains:
+      kd: 1.0
+      ki: 0.1
+      kp: 5.0
+    max_speed: 5.0
+    max_thrust: 100.0
+    max_yaw_rate: 0.5
+    position_gain: 1.0
+    speed_gains:
+      kd: 1.0
+      ki: 0.5
+      kp: 10.0
+environment:
+  current:
+    enabled: true
+    fluctuation_intensity: 0.2
+    mean_direction: 90.0
+    mean_speed: 0.5
+  obstacles:
+    dynamic: []
+    enabled: true
+    static: []
+  wind:
+    enabled: true
+    gust_intensity: 1.5
+    mean_direction: 45.0
+    mean_speed: 3.0
+scenarios:
+  disturbance:
+    description: Track straight path under significant disturbances
+    environment:
+      current:
+        enabled: true
+        fluctuation_intensity: 0.5
+        mean_direction: 90.0
+        mean_speed: 1.5
+      wind:
+        enabled: true
+        gust_intensity: 2.0
+        mean_direction: 90.0
+        mean_speed: 8.0
+    reference_trajectory:
+      desired_speed: 2.0
+      end:
+      - 100
+      - 0
+      start:
+      - 0
+      - 0
+      type: line
+  highspeed:
+    description: High-speed curved path following
+    reference_trajectory:
+      angular_speed: 0.05
+      center:
+      - 50
+      - 50
+      desired_speed: 5.0
+      radius: 30
+      type: circular
+  obstacle:
+    description: Navigate through obstacle field
+    environment:
+      obstacles:
+        dynamic:
+        - heading: 3.9
+          initial_position:
+          - 50
+          - 75
+          radius: 3.0
+          speed: 1.0
+          velocity:
+          - -0.5
+          - -0.5
+        - heading: 5.2
+          initial_position:
+          - 20
+          - 60
+          radius: 2.5
+          speed: 0.8
+          velocity:
+          - 0.3
+          - -0.2
+        enabled: true
+        static:
+        - position:
+          - 25
+          - 25
+          radius: 5.0
+        - position:
+          - 75
+          - 25
+          radius: 5.0
+        - position:
+          - 40
+          - 40
+          radius: 4.0
+        - position:
+          - 60
+          - 60
+          radius: 3.0
+    reference_trajectory:
+      desired_speed: 2.0
+      type: waypoints
+      waypoints:
+      - - 0
+        - 0
+      - - 50
+        - 50
+      - - 100
+        - 0
+  station:
+    description: Station keeping at a fixed point
+    environment:
+      current:
+        mean_direction: 90.0
+        mean_speed: 1.0
+      wind:
+        mean_direction: 45.0
+        mean_speed: 5.0
+    reference_trajectory:
+      heading: 0.0
+      position:
+      - 50
+      - 50
+      type: station
+  waypoint:
+    description: Simple waypoint following test
+    reference_trajectory:
+      desired_speed: 2.0
+      type: waypoints
+      waypoints:
+      - - 0
+        - 0
+      - - 20
+        - 20
+      - - 40
+        - 0
+      - - 60
+        - 20
+      - - 80
+        - 0
+simulation:
+  dt: 0.1
+  initial_state:
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  - 0
+  simulation_time: 120.0
+vessel:
+  drag_coefficients:
+    linear:
+    - 5.0
+    - 8.0
+    - 2.5
+    nonlinear:
+    - 10.0
+    - 15.0
+    - 5.0
+  inertia_z: 20.0
+  length: 2.0
+  mass: 50.0
+  max_steering: 1.0
+  max_thrust: 100.0
+  width: 1.0

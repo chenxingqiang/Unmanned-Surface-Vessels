@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USV Visualization - Debug Mode</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .container {
+            display: flex;
+            flex: 1;
+        }
+        .control-panel {
+            width: 300px;
+            padding: 20px;
+            background-color: #f5f5f5;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+        }
+        .visualization-area {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        #canvas {
+            width: 100%;
+            height: 100%;
+            background-color: #e6f2ff;
+        }
+        .debug-panel {
+            height: 300px;
+            background-color: #f0f0f0;
+            border-top: 1px solid #ddd;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .debug-panel h3 {
+            margin-top: 0;
+        }
+        .event-log {
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 5px;
+            background-color: #fff;
+            margin-bottom: 10px;
+        }
+        .data-display {
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 5px;
+            background-color: #fff;
+        }
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px;
+            border-bottom: 1px solid #eee;
+        }
+        .log-entry.event {
+            color: #2196F3;
+        }
+        .log-entry.error {
+            color: #F44336;
+        }
+        .log-entry.data {
+            color: #4CAF50;
+        }
+        button {
+            padding: 8px 12px;
+            margin: 5px 0;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        select, input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0 15px;
+            display: inline-block;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        label {
+            font-weight: bold;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            margin-right: 10px;
+            background-color: #ccc;
+        }
+        .status-indicator.connected {
+            background-color: #4CAF50;
+        }
+        .status-indicator.disconnected {
+            background-color: #F44336;
+        }
+        .status-indicator.running {
+            background-color: #2196F3;
+        }
+        .status-indicator.paused {
+            background-color: #FF9800;
+        }
+        .status-indicator.completed {
+            background-color: #9C27B0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="control-panel">
+            <h2>USV Control Panel</h2>
+            
+            <div>
+                <p>Connection: <span class="status-indicator" id="connection-status"></span> <span id="connection-text">Disconnected</span></p>
+                <p>Simulation: <span class="status-indicator" id="simulation-status"></span> <span id="simulation-text">Stopped</span></p>
+            </div>
+            
+            <div>
+                <label for="scenario">Scenario:</label>
+                <select id="scenario">
+                    <option value="waypoint">Waypoint Following</option>
+                    <option value="path">Path Following</option>
+                    <option value="obstacle">Obstacle Avoidance</option>
+                </select>
+                
+                <label for="controller">Controller:</label>
+                <select id="controller">
+                    <option value="pid">PID Controller</option>
+                    <option value="lqr">LQR Controller</option>
+                    <option value="mpc">MPC Controller</option>
+                </select>
+                
+                <div>
+                    <input type="checkbox" id="obstacle-avoidance" checked>
+                    <label for="obstacle-avoidance">Enable Obstacle Avoidance</label>
+                </div>
+            </div>
+            
+            <div>
+                <button id="start-btn">Start Simulation</button>
+                <button id="pause-btn" disabled>Pause</button>
+                <button id="resume-btn" disabled>Resume</button>
+                <button id="stop-btn" disabled>Stop</button>
+                <button id="test-conn-btn">Test Connection</button>
+                <button id="send-test-data-btn">Send Test Data</button>
+                <button id="clear-log-btn">Clear Log</button>
+            </div>
+        </div>
+        
+        <div class="visualization-area">
+            <canvas id="canvas"></canvas>
+        </div>
+    </div>
+    
+    <div class="debug-panel">
+        <h3>Socket.IO Debug Panel</h3>
+        <div class="event-log" id="event-log">
+            <div class="log-entry">Socket.IO debug log will appear here...</div>
+        </div>
+        <h3>Last Received Data</h3>
+        <div class="data-display" id="data-display">
+            <div class="log-entry">No data received yet...</div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Socket.IO connection with improved configuration
+        const socket = io({
+            transports: ['websocket', 'polling'],  // Try WebSocket first, fallback to polling
+            reconnectionAttempts: 10,             // Try to reconnect 10 times
+            reconnectionDelay: 1000,              // Start with 1s delay between reconnection attempts
+            timeout: 20000,                       // Increase connection timeout
+            forceNew: true,                       // Force a new connection
+            upgrade: true                         // Allow transport upgrade
+        });
+        
+        let simulationRunning = false;
+        let simulationPaused = false;
+        
+        // DOM elements
+        const connectionStatus = document.getElementById('connection-status');
+        const connectionText = document.getElementById('connection-text');
+        const simulationStatus = document.getElementById('simulation-status');
+        const simulationText = document.getElementById('simulation-text');
+        const startBtn = document.getElementById('start-btn');
+        const pauseBtn = document.getElementById('pause-btn');
+        const resumeBtn = document.getElementById('resume-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const testConnBtn = document.getElementById('test-conn-btn');
+        const sendTestDataBtn = document.getElementById('send-test-data-btn');
+        const clearLogBtn = document.getElementById('clear-log-btn');
+        const eventLog = document.getElementById('event-log');
+        const dataDisplay = document.getElementById('data-display');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Debug logger function
+        function logEvent(type, event, data = null) {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerHTML = `[${timestamp}] <strong>${event}</strong>`;
+            
+            if (data) {
+                let dataStr;
+                try {
+                    if (typeof data === 'object') {
+                        dataStr = JSON.stringify(data, null, 2).substring(0, 100);
+                        if (JSON.stringify(data).length > 100) {
+                            dataStr += '...';
+                        }
+                    } else {
+                        dataStr = String(data);
+                    }
+                    entry.innerHTML += `: ${dataStr}`;
+                } catch (e) {
+                    entry.innerHTML += `: [Error displaying data: ${e.message}]`;
+                }
+            }
+            
+            eventLog.appendChild(entry);
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+        
+        // Display received data
+        function displayData(data) {
+            try {
+                dataDisplay.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                dataDisplay.scrollTop = dataDisplay.scrollHeight;
+            } catch (e) {
+                dataDisplay.innerHTML = `<div class="log-entry error">Error displaying data: ${e.message}</div>`;
+            }
+        }
+        
+        // Update connection status
+        function updateConnectionStatus(connected) {
+            if (connected) {
+                connectionStatus.className = 'status-indicator connected';
+                connectionText.innerText = 'Connected';
+            } else {
+                connectionStatus.className = 'status-indicator disconnected';
+                connectionText.innerText = 'Disconnected';
+                simulationStatus.className = 'status-indicator';
+                simulationText.innerText = 'Stopped';
+                disableSimulationControls();
+            }
+        }
+        
+        // Update simulation status
+        function updateSimulationStatus(status) {
+            simulationStatus.className = `status-indicator ${status}`;
+            simulationText.innerText = status.charAt(0).toUpperCase() + status.slice(1);
+            
+            // Update button states
+            if (status === 'running') {
+                simulationRunning = true;
+                simulationPaused = false;
+                startBtn.disabled = true;
+                pauseBtn.disabled = false;
+                resumeBtn.disabled = true;
+                stopBtn.disabled = false;
+            } else if (status === 'paused') {
+                simulationRunning = true;
+                simulationPaused = true;
+                startBtn.disabled = true;
+                pauseBtn.disabled = true;
+                resumeBtn.disabled = false;
+                stopBtn.disabled = false;
+            } else if (status === 'completed' || status === 'stopped') {
+                simulationRunning = false;
+                simulationPaused = false;
+                startBtn.disabled = false;
+                pauseBtn.disabled = true;
+                resumeBtn.disabled = true;
+                stopBtn.disabled = true;
+            }
+        }
+        
+        // Disable all simulation controls
+        function disableSimulationControls() {
+            startBtn.disabled = false;
+            pauseBtn.disabled = true;
+            resumeBtn.disabled = true;
+            stopBtn.disabled = true;
+        }
+        
+        // Socket.IO event handlers
+        socket.on('connect', () => {
+            logEvent('event', 'Socket Connected');
+            updateConnectionStatus(true);
+            
+            // Request current simulation state
+            socket.emit('get_simulation_state');
+        });
+        
+        socket.on('connect_error', (error) => {
+            logEvent('error', 'Connection Error', error);
+            updateConnectionStatus(false);
+        });
+        
+        socket.on('reconnect', (attemptNumber) => {
+            logEvent('event', 'Reconnected', `after ${attemptNumber} attempts`);
+            updateConnectionStatus(true);
+        });
+        
+        socket.on('reconnect_attempt', (attemptNumber) => {
+            logEvent('event', 'Reconnection Attempt', `attempt #${attemptNumber}`);
+        });
+        
+        socket.on('disconnect', (reason) => {
+            logEvent('event', 'Socket Disconnected', reason);
+            updateConnectionStatus(false);
+        });
+        
+        socket.on('connection_response', (data) => {
+            logEvent('event', 'Connection Response', data);
+        });
+        
+        socket.on('simulation_status', (data) => {
+            logEvent('event', 'Simulation Status', data);
+            updateSimulationStatus(data.status);
+        });
+        
+        socket.on('simulation_state', (data) => {
+            logEvent('event', 'Simulation State', data);
+            
+            // Update UI based on state
+            if (data.running) {
+                updateSimulationStatus(data.paused ? 'paused' : 'running');
+            } else {
+                updateSimulationStatus('stopped');
+            }
+            
+            // Update form elements
+            document.getElementById('scenario').value = data.scenario || 'waypoint';
+            document.getElementById('controller').value = data.controller || 'pid';
+            document.getElementById('obstacle-avoidance').checked = data.obstacle_avoidance !== undefined ? data.obstacle_avoidance : true;
+        });
+        
+        socket.on('simulation_data', (data) => {
+            logEvent('data', 'Simulation Data', { time: data.time, position: [data.state.x, data.state.y] });
+            displayData(data);
+            
+            // Draw the vessel position on canvas
+            drawScene(data);
+        });
+        
+        socket.on('obstacle_avoidance_status', (data) => {
+            logEvent('event', 'Obstacle Avoidance Status', data);
+            document.getElementById('obstacle-avoidance').checked = data.enabled;
+        });
+        
+        socket.on('error', (error) => {
+            logEvent('error', 'Socket Error', error);
+        });
+        
+        // Button event handlers
+        startBtn.addEventListener('click', () => {
+            const scenario = document.getElementById('scenario').value;
+            const controller = document.getElementById('controller').value;
+            const obstacleAvoidance = document.getElementById('obstacle-avoidance').checked;
+            
+            logEvent('event', 'Start Simulation', { scenario, controller, obstacleAvoidance });
+            
+            socket.emit('start_simulation', {
+                scenario: scenario,
+                controller: controller,
+                obstacle_avoidance: obstacleAvoidance
+            });
+        });
+        
+        pauseBtn.addEventListener('click', () => {
+            logEvent('event', 'Pause Simulation');
+            socket.emit('pause_simulation');
+        });
+        
+        resumeBtn.addEventListener('click', () => {
+            logEvent('event', 'Resume Simulation');
+            socket.emit('resume_simulation');
+        });
+        
+        stopBtn.addEventListener('click', () => {
+            logEvent('event', 'Stop Simulation');
+            socket.emit('stop_simulation');
+        });
+        
+        testConnBtn.addEventListener('click', () => {
+            logEvent('event', 'Test Connection');
+            socket.emit('get_simulation_state');
+        });
+        
+        sendTestDataBtn.addEventListener('click', () => {
+            logEvent('event', 'Manual Test Data Request');
+            // This will cause the test server to send data if it's running
+            socket.emit('start_simulation', {
+                scenario: 'test',
+                controller: 'test',
+                obstacle_avoidance: true
+            });
+        });
+        
+        clearLogBtn.addEventListener('click', () => {
+            eventLog.innerHTML = '';
+            dataDisplay.innerHTML = '<div class="log-entry">No data received yet...</div>';
+        });
+        
+        // Canvas rendering
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        
+        function drawScene(data) {
+            if (!data || !data.state) return;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Set up coordinate transformation
+            const scaleRatio = 1.5;  // Pixels per meter
+            const originX = canvas.width / 2;
+            const originY = canvas.height / 2;
+            
+            ctx.save();
+            ctx.translate(originX, originY);
+            ctx.scale(scaleRatio, -scaleRatio);  // Flip Y-axis to make up positive
+            
+            // Draw grid
+            drawGrid(ctx, originX / scaleRatio, originY / scaleRatio, 10);
+            
+            // Draw vessel
+            const vesselSize = 5;  // Size in meters
+            ctx.save();
+            ctx.translate(data.state.x, data.state.y);
+            ctx.rotate(-data.state.heading);  // Negative because canvas Y is flipped
+            
+            // Vessel body
+            ctx.fillStyle = 'rgba(0, 102, 204, 0.8)';
+            ctx.beginPath();
+            ctx.moveTo(vesselSize, 0);
+            ctx.lineTo(-vesselSize/2, vesselSize/2);
+            ctx.lineTo(-vesselSize/2, -vesselSize/2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 0.2;
+            ctx.stroke();
+            ctx.restore();
+            
+            // Draw reference point
+            if (data.reference) {
+                ctx.fillStyle = 'rgba(255, 165, 0, 0.6)';
+                ctx.beginPath();
+                ctx.arc(data.reference.x, data.reference.y, 2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Line from vessel to reference
+                ctx.strokeStyle = 'rgba(255, 165, 0, 0.4)';
+                ctx.lineWidth = 0.5;
+                ctx.beginPath();
+                ctx.moveTo(data.state.x, data.state.y);
+                ctx.lineTo(data.reference.x, data.reference.y);
+                ctx.stroke();
+            }
+            
+            // Draw obstacles if present
+            if (data.obstacles) {
+                // Static obstacles
+                if (data.obstacles.static) {
+                    ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+                    for (const obstacle of data.obstacles.static) {
+                        ctx.beginPath();
+                        ctx.arc(obstacle.x, obstacle.y, obstacle.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+                
+                // Dynamic obstacles
+                if (data.obstacles.dynamic) {
+                    ctx.fillStyle = 'rgba(255, 128, 0, 0.5)';
+                    for (const obstacle of data.obstacles.dynamic) {
+                        ctx.beginPath();
+                        ctx.arc(obstacle.x, obstacle.y, obstacle.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                        
+                        // Draw heading indicator
+                        if (obstacle.heading !== undefined) {
+                            ctx.save();
+                            ctx.translate(obstacle.x, obstacle.y);
+                            ctx.rotate(-obstacle.heading);
+                            ctx.strokeStyle = 'black';
+                            ctx.lineWidth = 0.2;
+                            ctx.beginPath();
+                            ctx.moveTo(0, 0);
+                            ctx.lineTo(obstacle.radius, 0);
+                            ctx.stroke();
+                            ctx.restore();
+                        }
+                    }
+                }
+            }
+            
+            ctx.restore();
+        }
+        
+        function drawGrid(ctx, width, height, spacing) {
+            ctx.strokeStyle = 'rgba(200, 200, 200, 0.3)';
+            ctx.lineWidth = 0.1;
+            
+            // Draw vertical grid lines
+            for (let x = -width; x <= width; x += spacing) {
+                ctx.beginPath();
+                ctx.moveTo(x, -height);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+            
+            // Draw horizontal grid lines
+            for (let y = -height; y <= height; y += spacing) {
+                ctx.beginPath();
+                ctx.moveTo(-width, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+            }
+            
+            // Draw axes
+            ctx.strokeStyle = 'rgba(100, 100, 100, 0.5)';
+            ctx.lineWidth = 0.2;
+            
+            // X-axis
+            ctx.beginPath();
+            ctx.moveTo(-width, 0);
+            ctx.lineTo(width, 0);
+            ctx.stroke();
+            
+            // Y-axis
+            ctx.beginPath();
+            ctx.moveTo(0, -height);
+            ctx.lineTo(0, height);
+            ctx.stroke();
+        }
+        
+        // Initialize the canvas
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // Initial log entry
+        logEvent('event', 'Page Loaded');
+    </script>
+</body>
+</html> 

@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USV Socket Connection Test</title>
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        h1 { color: #333; }
+        button { 
+            padding: 8px 16px; 
+            margin: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:disabled { background: #ccc; }
+        button:hover:not(:disabled) { background: #45a049; }
+        pre { 
+            background: #f5f5f5; 
+            padding: 10px; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            overflow-x: auto;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .status { 
+            font-weight: bold; 
+            padding: 8px; 
+            border-radius: 4px; 
+            display: inline-block;
+            margin-top: 10px;
+        }
+        .connected { background: #dff0d8; color: #3c763d; }
+        .disconnected { background: #f2dede; color: #a94442; }
+        .log-entry { margin: 5px 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .log-entry.success { color: green; }
+        .log-entry.error { color: red; }
+        .log-entry.info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>USV Socket Connection Test</h1>
+    
+    <div>
+        <p>Server URL: <span id="server-url">http://localhost:8080</span></p>
+        <div>
+            <label for="port-input">Port:</label>
+            <input type="number" id="port-input" value="8080" min="1" max="65535">
+            <button id="connect-btn">Connect</button>
+            <button id="disconnect-btn" disabled>Disconnect</button>
+        </div>
+        <div class="status disconnected" id="connection-status">Disconnected</div>
+    </div>
+    
+    <h2>Controls</h2>
+    <div>
+        <button id="get-state-btn" disabled>Get State</button>
+        <button id="start-sim-btn" disabled>Start Simulation</button>
+        <button id="pause-sim-btn" disabled>Pause</button>
+        <button id="resume-sim-btn" disabled>Resume</button>
+        <button id="stop-sim-btn" disabled>Stop</button>
+        <button id="toggle-avoidance-btn" disabled>Toggle Obstacle Avoidance</button>
+    </div>
+    
+    <h2>Events Log</h2>
+    <button id="clear-log-btn">Clear Log</button>
+    <pre id="log"></pre>
+    
+    <h2>Last Data</h2>
+    <pre id="data-display"></pre>
+    
+    <script>
+        let socket = null;
+        let obstacleAvoidanceEnabled = true;
+        let simulationRunning = false;
+        const log = document.getElementById('log');
+        const dataDisplay = document.getElementById('data-display');
+        
+        // Button elements
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const getStateBtn = document.getElementById('get-state-btn');
+        const startSimBtn = document.getElementById('start-sim-btn');
+        const pauseSimBtn = document.getElementById('pause-sim-btn');
+        const resumeSimBtn = document.getElementById('resume-sim-btn');
+        const stopSimBtn = document.getElementById('stop-sim-btn');
+        const toggleAvoidanceBtn = document.getElementById('toggle-avoidance-btn');
+        const clearLogBtn = document.getElementById('clear-log-btn');
+        const portInput = document.getElementById('port-input');
+        const connectionStatus = document.getElementById('connection-status');
+        const serverUrl = document.getElementById('server-url');
+        
+        // Add log entry
+        function addLogEntry(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            entry.innerHTML = `<span class="timestamp">${new Date().toLocaleTimeString()}</span>: ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        // Connect to server
+        connectBtn.addEventListener('click', function() {
+            const port = portInput.value;
+            const url = `http://localhost:${port}`;
+            serverUrl.textContent = url;
+            
+            try {
+                addLogEntry(`Connecting to ${url}...`);
+                
+                socket = io(url, {
+                    reconnection: true,
+                    reconnectionAttempts: 5,
+                    timeout: 10000
+                });
+                
+                // Connection events
+                socket.on('connect', function() {
+                    addLogEntry(`Connected with ID: ${socket.id}`, 'success');
+                    connectionStatus.className = 'status connected';
+                    connectionStatus.textContent = 'Connected';
+                    
+                    // Enable/disable buttons
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    getStateBtn.disabled = false;
+                    startSimBtn.disabled = false;
+                    stopSimBtn.disabled = false;
+                    toggleAvoidanceBtn.disabled = false;
+                    
+                    // Get initial state
+                    socket.emit('get_simulation_state');
+                });
+                
+                socket.on('connect_error', function(error) {
+                    addLogEntry(`Connection error: ${error}`, 'error');
+                });
+                
+                socket.on('disconnect', function() {
+                    addLogEntry('Disconnected from server', 'error');
+                    connectionStatus.className = 'status disconnected';
+                    connectionStatus.textContent = 'Disconnected';
+                    
+                    // Reset button states
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    getStateBtn.disabled = true;
+                    startSimBtn.disabled = true;
+                    pauseSimBtn.disabled = true;
+                    resumeSimBtn.disabled = true;
+                    stopSimBtn.disabled = true;
+                    toggleAvoidanceBtn.disabled = true;
+                });
+                
+                // Simulation events
+                socket.on('simulation_status', function(data) {
+                    addLogEntry(`Simulation status: ${JSON.stringify(data)}`, 'info');
+                    
+                    // Update UI based on status
+                    if (data.status === 'started') {
+                        simulationRunning = true;
+                        startSimBtn.disabled = true;
+                        pauseSimBtn.disabled = false;
+                        resumeSimBtn.disabled = true;
+                        stopSimBtn.disabled = false;
+                    } else if (data.status === 'paused') {
+                        pauseSimBtn.disabled = true;
+                        resumeSimBtn.disabled = false;
+                    } else if (data.status === 'resumed') {
+                        pauseSimBtn.disabled = false;
+                        resumeSimBtn.disabled = true;
+                    } else if (data.status === 'stopped' || data.status === 'completed') {
+                        simulationRunning = false;
+                        startSimBtn.disabled = false;
+                        pauseSimBtn.disabled = true;
+                        resumeSimBtn.disabled = true;
+                        stopSimBtn.disabled = true;
+                    }
+                });
+                
+                socket.on('simulation_state', function(data) {
+                    addLogEntry(`Received simulation state: ${JSON.stringify(data)}`, 'info');
+                    displayData(data);
+                    
+                    // Update obstacle avoidance status
+                    if (data.obstacle_avoidance !== undefined) {
+                        obstacleAvoidanceEnabled = data.obstacle_avoidance;
+                        updateToggleButtonText();
+                    }
+                });
+                
+                socket.on('simulation_data', function(data) {
+                    addLogEntry(`Received simulation data (time: ${data.time})`, 'success');
+                    displayData(data);
+                });
+                
+                socket.on('obstacle_avoidance_status', function(data) {
+                    addLogEntry(`Obstacle avoidance status: ${JSON.stringify(data)}`, 'info');
+                    obstacleAvoidanceEnabled = data.enabled;
+                    updateToggleButtonText();
+                });
+                
+            } catch (error) {
+                addLogEntry(`Error creating socket: ${error}`, 'error');
+            }
+        });
+        
+        // Disconnect from server
+        disconnectBtn.addEventListener('click', function() {
+            if (socket) {
+                socket.disconnect();
+            }
+        });
+        
+        // Get state
+        getStateBtn.addEventListener('click', function() {
+            addLogEntry('Getting simulation state...');
+            socket.emit('get_simulation_state');
+        });
+        
+        // Start simulation
+        startSimBtn.addEventListener('click', function() {
+            addLogEntry('Starting simulation...');
+            socket.emit('start_simulation', {
+                scenario: 'obstacle',
+                controller: 'pid',
+                use_obstacle_avoidance: obstacleAvoidanceEnabled
+            });
+        });
+        
+        // Pause simulation
+        pauseSimBtn.addEventListener('click', function() {
+            addLogEntry('Pausing simulation...');
+            socket.emit('pause_simulation');
+        });
+        
+        // Resume simulation
+        resumeSimBtn.addEventListener('click', function() {
+            addLogEntry('Resuming simulation...');
+            socket.emit('resume_simulation');
+        });
+        
+        // Stop simulation
+        stopSimBtn.addEventListener('click', function() {
+            addLogEntry('Stopping simulation...');
+            socket.emit('stop_simulation');
+        });
+        
+        // Toggle obstacle avoidance
+        toggleAvoidanceBtn.addEventListener('click', function() {
+            obstacleAvoidanceEnabled = !obstacleAvoidanceEnabled;
+            addLogEntry(`Toggling obstacle avoidance to: ${obstacleAvoidanceEnabled}`);
+            socket.emit('toggle_obstacle_avoidance', { enabled: obstacleAvoidanceEnabled });
+            updateToggleButtonText();
+        });
+        
+        function updateToggleButtonText() {
+            toggleAvoidanceBtn.textContent = obstacleAvoidanceEnabled ? 
+                'Disable Obstacle Avoidance' : 'Enable Obstacle Avoidance';
+        }
+        
+        // Clear log
+        clearLogBtn.addEventListener('click', function() {
+            log.innerHTML = '';
+        });
+        
+        // Display data
+        function displayData(data) {
+            dataDisplay.textContent = JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+</html> 

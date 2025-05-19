@@ -1,0 +1,152 @@
+# Default configuration for USV navigation and control system
+
+# Simulation parameters
+simulation:
+  dt: 0.1                          # Time step (seconds)
+  simulation_time: 120.0           # Total simulation time (seconds)
+  initial_state: [0, 0, 0, 0, 0, 0] # Initial state [x, y, psi, u, v, r]
+
+# Vessel parameters
+vessel:
+  mass: 50.0                       # Mass (kg)
+  inertia_z: 20.0                  # Moment of inertia around z-axis (kg.m^2)
+  length: 2.0                      # Length (m)
+  width: 1.0                       # Width (m)
+  max_thrust: 100.0                # Maximum thrust force (N)
+  max_steering: 1.0                # Maximum steering moment (N.m)
+  drag_coefficients:               # Drag coefficients
+    linear: [5.0, 8.0, 2.5]        # Linear drag [X_u, Y_v, N_r]
+    nonlinear: [10.0, 15.0, 5.0]   # Nonlinear drag [X_uu, Y_vv, N_rr]
+
+# Environment parameters
+environment:
+  wind:
+    enabled: true
+    mean_speed: 3.0                # Mean wind speed (m/s)
+    mean_direction: 45.0           # Mean wind direction (degrees)
+    gust_intensity: 1.5            # Gust intensity factor
+  current:
+    enabled: true
+    mean_speed: 0.5                # Mean current speed (m/s)
+    mean_direction: 90.0           # Mean current direction (degrees)
+    fluctuation_intensity: 0.2     # Fluctuation intensity factor
+  obstacles:
+    enabled: false                 # Enable obstacles for scenarios that don't specify them
+    static: []                     # Static obstacles (empty by default)
+    dynamic: []                    # Dynamic obstacles (empty by default)
+
+# Controller parameters
+controllers:
+  pid:
+    heading_gains:
+      kp: 5.0
+      ki: 0.1
+      kd: 1.0
+    speed_gains:
+      kp: 10.0
+      ki: 0.5
+      kd: 1.0
+    position_gain: 1.0
+    max_yaw_rate: 0.5
+    max_thrust: 100.0
+    max_speed: 5.0
+  
+  lqr:
+    Q: [10.0, 10.0, 20.0, 5.0, 1.0, 5.0]  # State weights [x, y, psi, u, v, r]
+    R: [1.0, 10.0]                         # Control weights [thrust, moment]
+    max_thrust: 100.0
+    max_yaw_rate: 0.5
+    
+  mpc:
+    prediction_horizon: 20                 # Number of steps to predict ahead
+    Q: [10.0, 10.0, 20.0, 5.0, 1.0, 5.0]   # State weights [x, y, psi, u, v, r]
+    R: [1.0, 10.0]                         # Control weights [thrust, moment]
+    dR: [0.5, 5.0]                         # Control rate weights [dthrust, dmoment]
+    max_thrust: 100.0
+    max_yaw_rate: 0.5
+    solver_options:
+      max_iter: 100
+      tol: 1e-6
+
+# Test scenarios
+scenarios:
+  # Waypoint following scenario
+  waypoint:
+    description: "Simple waypoint following test"
+    reference_trajectory:
+      type: "waypoints"
+      waypoints: [
+        [0, 0],
+        [20, 20],
+        [40, 0],
+        [60, 20],
+        [80, 0]
+      ]
+      desired_speed: 2.0
+    
+  # Station keeping scenario
+  station:
+    description: "Station keeping at a fixed point"
+    reference_trajectory:
+      type: "station"
+      position: [50, 50]
+      heading: 0.0
+    environment:
+      wind:
+        mean_speed: 5.0
+        mean_direction: 45.0
+      current:
+        mean_speed: 1.0
+        mean_direction: 90.0
+    
+  # Disturbance rejection scenario
+  disturbance:
+    description: "Track straight path under significant disturbances"
+    reference_trajectory:
+      type: "line"
+      start: [0, 0]
+      end: [100, 0]
+      desired_speed: 2.0
+    environment:
+      wind:
+        enabled: true
+        mean_speed: 8.0
+        mean_direction: 90.0
+        gust_intensity: 2.0
+      current:
+        enabled: true
+        mean_speed: 1.5
+        mean_direction: 90.0
+        fluctuation_intensity: 0.5
+    
+  # High-speed scenario
+  highspeed:
+    description: "High-speed curved path following"
+    reference_trajectory:
+      type: "circular"
+      center: [50, 50]
+      radius: 30
+      angular_speed: 0.05
+      desired_speed: 5.0
+    
+  # Obstacle avoidance scenario
+  obstacle:
+    description: "Navigate through obstacle field"
+    reference_trajectory:
+      type: "waypoints"
+      waypoints: [
+        [0, 0],
+        [50, 50],
+        [100, 0]
+      ]
+      desired_speed: 2.0
+    environment:
+      obstacles:
+        enabled: true
+        static: [
+          {"position": [25, 25], "radius": 5.0},
+          {"position": [75, 25], "radius": 5.0}
+        ]
+        dynamic: [
+          {"initial_position": [50, 75], "heading": 225.0, "speed": 0.7, "radius": 3.0}
+        ] 
