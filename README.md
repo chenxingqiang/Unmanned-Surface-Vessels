@@ -76,6 +76,62 @@ The USV system consists of the following main components:
 3. **Navigation**: Handles path planning and obstacle avoidance
 4. **Visualization**: Provides a web-based 3D interface
 
+## Test Results and Analysis
+
+The system has been thoroughly tested under various scenarios to evaluate performance. Below are key test results and their analysis:
+
+### Obstacle Avoidance Performance
+
+![Obstacle Avoidance Comparison](usv_system/tests/outputs/obstacle_comparison.png)
+
+This test compares different obstacle avoidance strategies. The results demonstrate:
+- Effective COLREG-compliant obstacle avoidance in dynamic environments
+- Comparison of path deviations with different obstacle densities
+- Safety distance maintenance while preserving efficient navigation
+
+### Waypoint Navigation
+
+![Waypoint Navigation Test](usv_system/tests/outputs/waypoint_comparison.png)
+
+The waypoint navigation tests show:
+- Accurate tracking of predefined waypoints
+- Smooth transitions between waypoints
+- Performance comparison of different path planning algorithms
+
+![Waypoint PID Control](usv_system/tests/outputs/waypoint_pid.png)
+
+PID controller performance specifically tuned for waypoint navigation demonstrates:
+- Minimal overshoot at waypoint transitions
+- Rapid convergence to desired heading
+- Stability in maintaining course between waypoints
+
+### High-Speed Performance
+
+![High-Speed Navigation](usv_system/tests/outputs/highspeed_comparison.png)
+
+Testing at increased speeds reveals:
+- Control system stability at higher velocities
+- Compensation for increased momentum during turns
+- Error bounds at various speed settings
+
+### Station Keeping
+
+![Station Keeping Performance](usv_system/tests/outputs/station_comparison.png)
+
+Station keeping tests evaluate the USV's ability to maintain position:
+- Position hold accuracy under various conditions
+- Energy efficiency of station keeping algorithms
+- Drift compensation in the presence of disturbances
+
+### Environmental Disturbance Handling
+
+![Disturbance Response](usv_system/tests/outputs/disturbance_comparison.png)
+
+These tests analyze the system's response to environmental disturbances:
+- Wind and current compensation effectiveness
+- Recovery time after significant disturbances
+- Comparative performance of different control strategies under disturbances
+
 ## Configuration
 
 The system can be configured through YAML files located in the `config/` directory. The main configuration file is `config/default_config.yaml`.
